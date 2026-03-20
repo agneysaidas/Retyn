@@ -3,6 +3,11 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.base_user import BaseUserManager
 
 class UserManager(BaseUserManager):
+    '''
+    Defines how users are created
+    Required when you override default user fields (like removing username).
+    '''
+    
     def create_user(self,email,password=None,**extra_fields):
         if not email:
             raise ValueError("Email is required")
@@ -23,6 +28,7 @@ class UserManager(BaseUserManager):
         return self.create_user(email,password,**extra_fields)
 
 class User(AbstractUser):
+    #custom user model inherits all Django auth features.
     username = None
     
     email = models.EmailField(unique=True)
@@ -33,7 +39,7 @@ class User(AbstractUser):
         ('manager','Manager'),
         ('cashier','Cashier'),
     )
-    role = models.CharField(max_length=255,choices=ROLE_CHOICES)
+    role = models.CharField(max_length=20,choices=ROLE_CHOICES)
     
     store = models.ForeignKey(
         'stores.Store',
@@ -50,4 +56,5 @@ class User(AbstractUser):
     objects = UserManager()
     
     def __str__(self):
+        #Controls how user is displayed (admin panel, shell, etc.).
         return self.email
