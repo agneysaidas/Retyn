@@ -30,5 +30,26 @@ class Product(models.Model):
     
     def __str__(self):
         return self.name
-
-
+    
+class Inventory(models.Model):
+    store = models.ForeignKey(
+        'stores.Store',
+        on_delete=models.CASCADE,
+        related_name='inventory_items'
+    )
+    
+    product = models.ForeignKey(
+        'products.Product',
+        on_delete=models.CASCADE,
+        related_name='inventory_items'
+    )
+    
+    quantity = models.IntegerField(default=0)
+    reorder_level = models.IntegerField(default=10)
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ('store','product')
+        
+    def __str__(self):
+        return f"{self.product.name} - {self.store.name}"
