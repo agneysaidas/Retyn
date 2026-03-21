@@ -1,4 +1,5 @@
 from django.db import models
+from decimal import Decimal
 
 class Category(models.Model):
     name = models.CharField(max_length=50)
@@ -64,7 +65,7 @@ class Price(models.Model):
     base_price = models.DecimalField(max_digits=10,decimal_places=2)
     vat_rate = models.DecimalField(max_digits=5,decimal_places=2)
     is_vat_inclusive = models.BooleanField(default=True)
-    start_date = models.DateTimeField
+    start_date = models.DateTimeField(auto_now=True)
     end_date = models.DateTimeField(null=True,blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -75,4 +76,7 @@ class Price(models.Model):
     def get_final_price(self):
         if self.is_vat_inclusive:
             return self.base_price
-        return self.base_price + (self.base_price*self.vat_rate/100)
+        return self.base_price + (self.base_price*self.vat_rate/Decimal('100'))
+    
+    class Meta:
+        ordering = ['-start_date']
