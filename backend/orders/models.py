@@ -41,6 +41,11 @@ class OrderItem(models.Model):
         'products.Product',
         on_delete=models.CASCADE
     )
+    batch = models.ForeignKey(
+        'products.Batch',
+        on_delete=models.SET_NULL,
+        null = True
+    )
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10,decimal_places=2)
     subtotal = models.DecimalField(max_digits=10,decimal_places=2)
