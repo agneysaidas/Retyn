@@ -104,3 +104,32 @@ class Batch(models.Model):
         
     def __str__(self):
         return f"{self.product.name} - {self.batch_number}"
+    
+class InventoryLog(models.Model):
+    CHANGE_TYPE=(
+        ('sale',"Sale"),
+        ('purchase','Purchase'),
+        ('adjustment','Adjustment'),
+        ('return','Reutrn')
+    )
+    store = models.ForeignKey(
+        'stores.Store',
+        on_delete=models.CASCADE
+    )
+    product = models.ForeignKey(
+        'products.Product',
+        on_delete=models.CASCADE
+    )
+    batch = models.ForeignKey(
+        'products.Batch',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    change=models.IntegerField()
+    reason = models.CharField(max_length=20,choices=CHANGE_TYPE)
+    reference_id = models.IntegerField(null=True,blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.product.name} ({self.change})"

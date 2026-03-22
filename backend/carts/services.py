@@ -1,6 +1,6 @@
 from django.db import transaction,models
 from decimal import Decimal
-from products.models import Inventory, Batch
+from products.models import Inventory, Batch,InventoryLog
 from orders.models import Order,OrderItem
 
 def checkout(carts):
@@ -51,6 +51,15 @@ def checkout(carts):
             #Reduce batch quantity
             batch.quantity -= take_qty
             batch.save()
+            
+            InventoryLog.objects.create(
+                store=carts.store,
+                product = item.product,
+                batch=batch,
+                change = -take_qty,
+                reason='sale',
+                reference_id = order.id
+            )
             
             total_amount += subtotal
             quantity_needed -= take_qty
