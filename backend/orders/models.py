@@ -48,7 +48,10 @@ class OrderItem(models.Model):
     )
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10,decimal_places=2)
+    discount = models.DecimalField(max_digits=10,decimal_places=2,default=0)
+    final_price = models.DecimalField(max_digits=10,decimal_places=2,default=0)
     subtotal = models.DecimalField(max_digits=10,decimal_places=2)
+    final_subtotal = models.DecimalField(max_digits=10,decimal_places=2,default=0)
     
     def __str__(self):
         return f"{self.product.name} * {self.quantity}"
