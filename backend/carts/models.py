@@ -25,8 +25,6 @@ class CartItem(models.Model):
         on_delete=models.CASCADE,
     )
     quantity = models.IntegerField(default=1)
-    price = models.DecimalField(max_digits=10,decimal_places=2)
-    sub_total = models.DecimalField(max_digits=10,decimal_places=2)
     
     def __str__(self):
         return f"{self.product.name}*{self.quantity}"
