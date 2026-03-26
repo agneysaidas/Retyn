@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'suppliers',
     'purchases',
     'django_extensions',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
