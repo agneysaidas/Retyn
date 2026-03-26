@@ -27,8 +27,17 @@ def checkout(cart):
         cart_total = Decimal('0')
         for item in cart.items.all():
             price = get_selling_price(item.product)
-            cart_total += item.product.price.base_price * item.quantity  # adjust if needed
+            batch = Batch.objects.filter(
+                product = item.product,
+                store = cart.store,
+                quantity__gt = 0
+            ).order_by('expiry_date').first()
+            
+            if not batch:
+                raise InsufficientStock(f"No stock for {item.product.name}")
 
+            cart_total += batch.selling_price* item.quantity
+            
         for item in cart.items.all():
             product = item.product
             quantity_needed = item.quantity

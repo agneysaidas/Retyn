@@ -1,10 +1,12 @@
 from django.shortcuts import render
+from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .models import Cart, CartItem
 from .serializer import CartSerializer,CartItemSerializer
 from products.models import Product
 from users.models import User
+from .services import checkout,InsufficientStock
 
 class AddtoCartView(APIView):    
     def post(self,request):
@@ -83,3 +85,38 @@ class RemoveCartItemView(APIView):
         item.delete()
         
         return Response({'Message':"Item removed"})
+    
+class CheckoutView(APIView):
+    
+    def post(self,request):
+        user = User.objects.first()
+        cart = Cart.objects.filter(user=user,is_active=True).first()
+        
+        if not cart:
+            return Response(
+                {'Error':'Cart is empty'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not cart.items.exists():
+            return Response(
+                {'Error':"Cart has no items"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            order = checkout(cart)
+        except InsufficientStock as e:
+            return Response(
+                {'Error':'Something went wrong'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        return Response(
+            {
+                "Message":"Order placed Successfully",
+                "order_id":order.id,
+                "total_amount":str(order.total_amount),
+                "total_discount":str(order.total_discount),
+                "final_amount":str(order.final_amount),
+            }
+        )
