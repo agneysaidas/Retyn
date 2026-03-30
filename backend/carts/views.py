@@ -2,6 +2,7 @@ from django.shortcuts import render
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework import status
 from .models import Cart, CartItem
 from .serializer import CartSerializer,CartItemSerializer
 from products.models import Product
@@ -106,8 +107,9 @@ class CheckoutView(APIView):
         try:
             order = checkout(cart)
         except InsufficientStock as e:
+            print("CHECKOUT ERROR:",str(e))
             return Response(
-                {'Error':'Something went wrong'},
+                {"error":str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
