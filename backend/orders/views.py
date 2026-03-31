@@ -1,31 +1,21 @@
 from django.shortcuts import render
+from django.views.decorators.csrf import csrf_exempt
+from django.http import HttpResponse
+from django.conf import settings
+import razorpay
+from django.db import transaction
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Order
-from .services import cancel_order,InvalidOrderState, process_payment,PaymentFailed
+import json
+from .models import Order, Payment
+from .services import cancel_order,InvalidOrderState, process_payment,PaymentFailed,create_payment_order
 from users.models import User
 from .serializers import OrderSerializer
-
-class CancelOrderView(APIView):
-    def post(self,requst,order_id):
-        user = User.objects.first()
-        
-        try:
-            order = Order.objects.get(id = order_id)
-        except:
-            return Response({"Error":"Order not found"},status=404)
-        
-        try:
-            cancel_order(order,user)
-        except InvalidOrderState as e:
-            return Response({"Error":str(e)},status=400)
-        
-        return Response({"Message":"Order cancelled successfully"})
     
 class OrderListView(APIView):
     def get(self,request):
-        user = User.objects.first()
+        user = request.user
         
         orders = Order.objects.filter(user=user).order_by('-created_at')
         serializer = OrderSerializer(orders,many=True)
@@ -33,7 +23,7 @@ class OrderListView(APIView):
     
 class OrderDetailView(APIView):
     def get(self,request,order_id):
-        user = User.objects.first()
+        user = request.user
         
         try:
             order = Order.objects.get(id = order_id)
@@ -50,7 +40,7 @@ class OrderDetailView(APIView):
     
 class PaymentView(APIView):
     def post(self,request,order_id):
-        user = User.objects.first()
+        user = request.user
         
         method = request.data.get('method')
         
@@ -74,4 +64,99 @@ class PaymentView(APIView):
             "message":"Payment Successful",
             "order_status":order.status,
             "payment_id":payment.id
-        })        
+        })   
+        
+class CreatePaymentView(APIView):
+    def post(self,request,order_id):
+        user = request.user
+        
+        try:
+            order = Order.objects.get(id = order_id)
+        except Order.DoesNotExist:
+            return Response({"Error":"Order not fount"},status=404)
+        
+        if order.user != user:
+            return Response({'Error':'Not allowed'},status=403)
+        
+        data = create_payment_order(order)   
+        
+        return Response(data)  
+    
+@csrf_exempt
+def razorpay_webhook(request):
+    body = request.body
+    signature = request.headers.get('X-Razorpay-Signature')
+    
+    client = razorpay.Client(
+        auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+    )
+    
+    try:
+        client.utility.verify_webhook_signature(
+            body, 
+            signature, 
+            settings.RAZORPAY_WEBHOOK_SECRET
+        )
+    except:
+        return HttpResponse(status=400)
+    
+    data = json.loads(body)
+    event = data.get('event')
+    
+    #Extract data safely
+    payload = data.get('payload',{})
+    payment_entity = payment.get('payment',{}).get('entity',{})
+    
+    razorpay_order_id = payment_entity.get('order_id')
+    razorpay_payment_id = payment_entity.get('id')
+    
+    if not razorpay_order_id:
+        return HttpResponse(status=400)
+    
+    try:
+        payment = Payment.objects.select_for_update().get(
+            razorpay_order_id = razorpay_order_id
+        )
+    except Payment.DoesNotExist:
+        return HttpResponse(status=404)
+    
+    #Idempotency check
+    if payment.status in ['Success','Failed']:
+        return HttpResponse(status = 200)
+    
+    with transaction.atomic():
+        
+        order = payment.order
+        if event == 'payment.captured':
+            payment.status = "Success"
+            payment.razorpay_payment_id = razorpay_payment_id
+            payment.save()
+    
+            #prevent double confirmation
+            if order.status != 'Confirmed':
+                order.status = 'Confirmed'
+                order.save()
+        elif event == 'payment.failed':
+            payment.status = 'Failed'
+            payment.razorpay_payment_id = razorpay_payment_id
+            payment.save()
+            
+            cancel_order(order)
+        
+    return HttpResponse(status=200)
+
+class CancelOrderView(APIView):
+    def post(self,request,order_id):
+        user = request.user
+        
+        try:
+            order = Order.objects.get(id=order_id)
+        except Order.DoesNotExist:
+            return Response({"Error":"Order not found"},status=404)
+    
+        try:
+            cancel_order(order,user)
+        except InvalidOrderState as e:
+            return Response({"Error":str(e)},status=400)
+        
+        return Response({"Message":"Order cancelled successfully"})

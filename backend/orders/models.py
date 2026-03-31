@@ -71,3 +71,6 @@ class Payment(models.Model):
     amount = models.DecimalField(max_digits=10,decimal_places=2)
     status= models.CharField(max_length=20,default='completed')
     created_at = models.DateTimeField(auto_now_add=True)
+    razorpay_order_id = models.CharField(max_length=255, null=True, blank=True)
+    razorpay_payment_id = models.CharField(max_length=255, null=True, blank=True)
+    

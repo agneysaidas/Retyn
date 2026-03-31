@@ -1,9 +1,10 @@
 from decimal import Decimal
 import random
-
+import razorpay
 from django.db import transaction,models
 from orders.models import Order,Payment
 from products.models import Inventory,Batch,InventoryLog
+from django.conf import settings
 
 class InvalidOrderState(Exception):
     pass
@@ -134,3 +135,81 @@ def process_payment(order,method,user = None):
     else:
         raise PaymentFailed("Invalid Payment Method")
     
+client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+
+def create_payment_order(order):
+    if order.status != 'Pending':
+        raise Exception("Invalid order state")
+    
+    amount = int(order.final_amount * 100)
+    
+    razorpay_order = client.order.create({
+        'amount':amount,
+        'currency':"EUR",
+        'payment_capture':1
+    })
+    
+    payment = Payment.objects.create(
+        order= order,
+        method = 'Card',
+        amount = order.final_amount,
+        status = "Pending",
+        razorpay_order_id = razorpay_order['id']
+    )
+    
+    return{
+        'razorpay_order_id': razorpay_order['id'],
+        'amount':amount
+    }
+    
+class InvalidOrderState(Exception):
+    pass
+
+def cancel_order(order,user=None):
+    with transaction.atomic():
+        
+        #Ownership check(only if user-triggered)
+        if user and order.user != user:
+            raise InvalidOrderState("Not allowed")
+        
+        #Prevent duplicate cancel
+        if order.status == "Cancelled":
+            raise InvalidOrderState("Order already canelled")
+        
+        #Restore stock
+        for item in order.items.all():
+            batch = item.batch
+            
+            #Restore batch quanity safely
+            batch.quantity = models.F('quantity')+item.quantity
+            batch.save()
+            
+            #Inventory Log
+            InventoryLog.objects.create(
+                store = order.store,
+                product = item.product,
+                batch=batch,
+                change = item.quantity,
+                reason = 'Cancel',
+                reference_id = order.id
+            )
+        
+        #Recalculate inventory
+        for item in order.items.all():
+            total_qty = Batch.objects.filter(
+                product = item.product,
+                store = order.store
+            ).aggregate(total = models.Sum('quantity'))['total'] or 0
+            
+            Inventory.objects.filter(
+                product = item.product,
+                store = order.store
+            ).update(quantity = total_qty)
+            
+        #Update order status
+        order.status = "Cancelled"
+        order.save()
+        
+        return order
+            
+            

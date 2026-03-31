@@ -11,7 +11,7 @@ from .services import checkout,InsufficientStock
 
 class AddtoCartView(APIView):    
     def post(self,request):
-        user = User.objects.first()
+        user = request.user
         product_id = request.data.get('product')
         quantity = request.data.get('quantity',1)
         
@@ -42,7 +42,7 @@ class AddtoCartView(APIView):
     
 class CartView(APIView):
     def get(self,request):
-        user = User.objects.first()
+        user = request.user
         try:
             cart = Cart.objects.get(user=user,is_active = True)
         except Cart.DoesNotExist:
@@ -69,7 +69,7 @@ class UpdateCartItemView(APIView):
 class RemoveCartItemView(APIView):
     
     def delete(self,request):
-        user = User.objects.first()
+        user = request.user
         item_id = request.data.get('item_id')
         
         if not item_id:
@@ -90,7 +90,7 @@ class RemoveCartItemView(APIView):
 class CheckoutView(APIView):
     
     def post(self,request):
-        user = User.objects.first()
+        user = request.user
         cart = Cart.objects.filter(user=user,is_active=True).first()
         
         if not cart:

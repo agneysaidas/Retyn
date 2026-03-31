@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'purchases',
     'django_extensions',
     'rest_framework',
+    'rest_framework.authtoken'
 ]
 
 MIDDLEWARE = [
@@ -132,3 +133,15 @@ STATIC_URL = 'static/'
 
 AUTH_USER_MODEL = 'users.User'
 
+RAZORPAY_KEY_ID = 'rzp_test_SXRr37tLjnTA8c'
+RAZORPAY_KEY_SECRET = 'B6Xe7UsbYyoBywI0XcZ8vYTB'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
