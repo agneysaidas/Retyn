@@ -102,6 +102,10 @@ class Batch(models.Model):
     class Meta:
         unique_together = ('product','store','batch_number')
         
+        indexes = [
+            models.Index(fields=['product','store','expiry_date'])
+        ]
+        
     def __str__(self):
         return f"{self.product.name} - {self.batch_number}"
     

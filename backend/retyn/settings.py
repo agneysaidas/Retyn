@@ -145,3 +145,21 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
+
+DEFAULT_PERMISSION_CLASSES = [
+    'rest_framework.permissions.IsAuthenticated'
+]
+
+LOGGING = {
+    'version':1,
+    'disable_existing_loggers':False,
+    'handlers':{
+        'console':{
+            'class':'logging.StreamHandler',
+        },
+    },
+    'root':{
+        'handlers':['console'],
+        'level':'INFO',
+    },
+}

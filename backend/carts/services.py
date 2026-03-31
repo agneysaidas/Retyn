@@ -5,11 +5,15 @@ from decimal import Decimal
 from products.models import Inventory, Batch,InventoryLog
 from orders.models import Order,OrderItem
 from offers.models import Offer
+import logging
+
+logger = logging.getLogger(__name__)
 
 class InsufficientStock(Exception):
     pass
 
 def checkout(cart):
+    logger.info(f"Checkout started for Cart {cart.id}")
     with transaction.atomic():
 
         total_amount = Decimal('0')      # BEFORE discount
@@ -26,18 +30,33 @@ def checkout(cart):
         #Pre-calculate cart total (IMPORTANT for offers)
         cart_total = Decimal('0')
         for item in cart.items.all():
-            price = get_selling_price(item.product)
-            batch = Batch.objects.filter(
+            # price = get_selling_price(item.product)
+            batches = Batch.objects.filter(
                 product = item.product,
                 store = cart.store,
-                quantity__gt = 0
-            ).order_by('expiry_date').first()
+                quantity__gt = 0,
+                expiry_date__gt = timezone.now()
+            ).order_by('expiry_date')
             
-            if not batch:
+            if not batches.exists():
+                logger.error(f"No stock for product {item.product.id}")
                 raise InsufficientStock(f"No stock for {item.product.name}")
-
-            cart_total += batch.selling_price* item.quantity
             
+            qty_needed = item.quantity
+            
+            for batch in batches:
+                if qty_needed <= 0:
+                    break
+                
+                take = min(batch.quantity,qty_needed)
+                cart_total += batch.selling_price* take
+                qty_needed -= take
+                
+            if qty_needed>0:
+                logger.error(f"Insufficient stock for product {item.product.id}")
+                raise InsufficientStock(f"Insufficient stock for product {item.product.id}")
+         
+        #MAIN Processing   
         for item in cart.items.all():
             product = item.product
             quantity_needed = item.quantity
@@ -49,24 +68,22 @@ def checkout(cart):
                 quantity__gt=0,
                 expiry_date__gt=timezone.now()  # ❗ filter expired
             ).order_by('expiry_date')
-
-            if not batches.exists():
-                raise InsufficientStock(f"No stock for {product.name}")
-
+            
             #Get offer ONCE per product
             offer = get_best_offer(
                 product=product,
                 store=cart.store,
                 cart_total=cart_total
             )
+            
+            logger.info(f"Processing product {product.id} with offer {offer.id if offer else None}")
 
             for batch in batches:
                 if quantity_needed <= 0:
                     break
 
-                available_qty = batch.quantity
                 take_qty = min(batch.quantity, quantity_needed)
-                price = get_selling_price(product, batch)
+                price = batch.selling_price
 
                 # 🔹 Base calculations
                 base_subtotal = price * take_qty
@@ -104,18 +121,13 @@ def checkout(cart):
                 #Update inventory directly
                 Inventory.objects.filter(
                     product=product,
-                    store=cart.store
-                ).update(quantity=F('quantity') - take_qty)
-
-                #Log
-                InventoryLog.objects.create(
                     store=cart.store,
-                    product=product,
-                    batch=batch,
-                    change=-take_qty,
-                    reason='sale',
-                    reference_id=order.id
+                    batch = batch,
+                    change = -take_qty,
+                    reason = 'SALE'
                 )
+                
+                logger.info(f"Deducted {take_qty} from batch {batch.ig}")
 
                 total_amount += base_subtotal
                 total_discount += discount
@@ -123,14 +135,26 @@ def checkout(cart):
                 quantity_needed -= take_qty
 
             if quantity_needed > 0:
+                logger.error(f"Stock mismatch during checkout for product {product.id}")
                 raise InsufficientStock(f"Insufficient stock for {product.name}")
+            
+            #Update inventory ONCE per product
+            total_qty = Batch.objects.filter(
+                product=product,
+                store = cart.store
+            ).aggregate(total = models.Sum('quantity'))['total'] or 0
+            
+            Inventory.objects.filter(
+                product = product,
+                store = cart.store 
+            ).update(quantity = total_qty)
 
             #Increment offer usage (ONCE per product)
             if offer:
                 Offer.objects.filter(id = offer.id).update(
                     used_count = F('used_count') +1    
                 )
-                
+                logger.info(f"Offer {offer.id} used for product {product.id}")
 
         final_amount = total_amount - total_discount
 
@@ -141,6 +165,8 @@ def checkout(cart):
 
         cart.is_active = False
         cart.save()
+        
+        logger.info(f"Checkout completed for Cart {cart.id}, Order {order.id}")
 
         return order
 
@@ -170,7 +196,3 @@ def get_best_offer(product,store,cart_total):
     
     #Pick highest Priority
     return offers.order_by('-priority').first()
-
-def get_selling_price(product, batch=None):
-    if batch:
-        return batch.selling_price

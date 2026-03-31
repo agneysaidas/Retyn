@@ -5,140 +5,108 @@ from django.db import transaction,models
 from orders.models import Order,Payment
 from products.models import Inventory,Batch,InventoryLog
 from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 class InvalidOrderState(Exception):
     pass
-
-def cancel_order(order,user):
-    with transaction.atomic():
-        
-        #Validate Ownership
-        if order.user != user:
-            raise InvalidOrderState("Not Allowed")
-        
-        #Prevent double cancel
-        if order.status == "cacelled":
-            raise InvalidOrderState("Order already Cancelled")
-        
-        #Restore Stock
-        for item in order.items.all():
-            batch = item.batch
-            
-            #Restore Batch quantity
-            batch.quantity = models.F('quantity')+item.quantity
-            batch.save()
-            
-            #Log inventory
-            InventoryLog.objects.create(
-                store= order.store,
-                product = item.product,
-                batch = batch,
-                change = item.quantity,
-                reason="cancel",
-                reference_id = order.id
-            )
-            
-        #Recalculate Inventory
-        for item in order.items.all():
-            
-            total_qty = Batch.objects.filter(
-                product = item.product,
-                store = order.store
-            ).aggregate(total = models.Sum('quantity'))['total'] or 0
-            
-            Inventory.objects.filter(
-                product = item.product,
-                store = order.store
-            ).update(quantity = total_qty)
-            
-        #Update Status
-        order.status = 'Cancelled'
-        order.save()
-        
-        return order
     
 class PaymentFailed(Exception):
     pass
 
 def handle_cod(order):
+    logger.info(f"Processing CASH payment for Order {order.id}")
     payment = Payment.objects.create(
         order = order,
-        method = "Cash",
+        method = "CASH",
         amount= order.final_amount,
-        status = "Success"
+        status = "SUCCESS"
     )
-    order.status = "Confirmed"
+    order.status = "CONFIRMED"
     order.save()
+    logger.info(f"Order {order.id} confirmed via CASH")
     
     return payment
 
 def handle_wallet(order,user):
+    logger.info(f"Processing WALLET payment for Order {order.id}")
     #simulate wallet balance
     wallet_balance = Decimal('500')
     
     if wallet_balance < order.final_amount:
+        logger.warning(f"Insufficient wallet balance for Order {order.id}")
         payment = Payment.objects.create(
             order = order,
-            method = "Wallet",
+            method = "WALLET",
             amount= order.final_amount,
-            status = "Failed"
+            status = "FAILED"
         )
         raise PaymentFailed("Insufficient wallet balance")
     
     payment = Payment.objects.create(
         order = order,
-        method = "Wallet",
+        method = "WALLET",
         amount= order.final_amount,
-        status = "Success"
+        status = "SUCCESS"
     )
     
-    order.status = "Confirmed"
+    order.status = "CONFIRMED"
     order.save()
+    logger.info(f"Order {order.id} confirmed via WALLET")
     
     return payment
 
 def handle_card(order):
+    logger.info(f"Processing CARD payment for Order {order.id}")
     success = random.choice([True,False])
     
     if not success:
+        logger.error(f"Card payment failed for Order {order.id}")
         payment = Payment.objects.create(
             order = order,
-            method = "Card",
+            method = "CARD",
             amount= order.final_amount,
-            status = "Failed"
+            status = "FAILED"
         )
         raise PaymentFailed("Card Payment Failed")
     
     payment = Payment.objects.create(
         order = order,
-        method = "Card",
+        method = "CARD",
         amount= order.final_amount,
-        status = "Success"
+        status = "SUCCESS"
     )
     
-    order.status = "Confirmed"
+    order.status = "CONFIRMED"
     order.save()
+    logger.info(f"Order {order.id} confirmed via CARD")
     
     return payment
 
 def process_payment(order,method,user = None):
+    logger.info(f"Starting payment for Order {order.id} with method {method}")
     if order.status!= 'pending':
+        logger.warning(f"Invalid payment attempt for Order {order.id}")
         raise PaymentFailed("Invalid order state")
     
     #COD always succeeds
-    if method == "Cash":
+    if method == "CASH":
         return handle_cod(order)
-    elif method == "Wallet":
+    elif method == "WALLET":
         return handle_wallet(order,user)
-    elif method == "Card":
+    elif method == "CARD":
         return handle_card(order)
     else:
+        logger.error(f"Invalid payment method {method} for Order {order.id}")
         raise PaymentFailed("Invalid Payment Method")
     
 client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
 def create_payment_order(order):
-    if order.status != 'Pending':
+    logger.info(f"Creating Razorpay order for Order{order.id}")
+    if order.status != 'PENDING':
+        logger.warning(f"Invalid Razorpay request for Order {order.id}")
         raise Exception("Invalid order state")
     
     amount = int(order.final_amount * 100)
@@ -151,11 +119,12 @@ def create_payment_order(order):
     
     payment = Payment.objects.create(
         order= order,
-        method = 'Card',
+        method = 'CARD',
         amount = order.final_amount,
-        status = "Pending",
+        status = "PENDING",
         razorpay_order_id = razorpay_order['id']
     )
+    logger.info (f"Razorpay order created for Order {order.id}")
     
     return{
         'razorpay_order_id': razorpay_order['id'],
@@ -166,14 +135,17 @@ class InvalidOrderState(Exception):
     pass
 
 def cancel_order(order,user=None):
+    logger.info(f"Cancel request for Order {order.id}")
     with transaction.atomic():
         
         #Ownership check(only if user-triggered)
         if user and order.user != user:
+            logger.warning(f"Unauthorized cancel attempt for Order{order.id}")
             raise InvalidOrderState("Not allowed")
         
         #Prevent duplicate cancel
-        if order.status == "Cancelled":
+        if order.status == "CANCELLED":
+            logger.warning(f"Duplicate cancel attempt for order {order.id}")
             raise InvalidOrderState("Order already canelled")
         
         #Restore stock
@@ -190,25 +162,31 @@ def cancel_order(order,user=None):
                 product = item.product,
                 batch=batch,
                 change = item.quantity,
-                reason = 'Cancel',
+                reason = 'CANCEL',
                 reference_id = order.id
             )
+            
+            logger.info(f"Restored {item.quantity} units for product {item.product.id}")
+            
+        #Update inventory ONCE per product (not loop twicw)
+        product_ids = set(order.items.values_list('product_id', flat = True))
         
-        #Recalculate inventory
-        for item in order.items.all():
+        for product_id in product_ids:
             total_qty = Batch.objects.filter(
-                product = item.product,
+                product_id = product_id,
                 store = order.store
             ).aggregate(total = models.Sum('quantity'))['total'] or 0
             
             Inventory.objects.filter(
-                product = item.product,
+                product_id = product_id,
                 store = order.store
             ).update(quantity = total_qty)
             
         #Update order status
-        order.status = "Cancelled"
+        order.status = "CANCELLED"
         order.save()
+        
+        logger.info (f"Order {order.id} cancelled successfully")
         
         return order
             

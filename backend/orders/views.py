@@ -16,71 +16,63 @@ from .serializers import OrderSerializer
 class OrderListView(APIView):
     def get(self,request):
         user = request.user
-        
-        orders = Order.objects.filter(user=user).order_by('-created_at')
-        serializer = OrderSerializer(orders,many=True)
+        orders = Order.objects.filter(user = user).order_by('-created_at')
+        serializer = OrderSerializer(orders,many = True)
         return Response(serializer.data)
     
 class OrderDetailView(APIView):
     def get(self,request,order_id):
-        user = request.user
         
-        try:
-            order = Order.objects.get(id = order_id)
-        except:
+        order = Order.objects.filter(
+            id = order_id,
+            user = request.user
+        ).first()
+        
+        if not order:
             return Response({"Error":"Order not found"},status=404)
         
-        #Security check
-        if order.user != user:
-            return Response({"Error":"Not allowed"},status=403)
-        
         serializer = OrderSerializer(order)
-        
         return Response(serializer.data)
     
 class PaymentView(APIView):
     def post(self,request,order_id):
-        user = request.user
         
         method = request.data.get('method')
         
-        if method not in ['Cash','Wallet','Card']:
+        if method not in ['CASH','WALLET','CARD']:
             return Response({"Error":"Invalid Payment Method"},status=400)
-        
-        try:
-            order = Order.objects.get(id = order_id)
-        except Order.DoesNotExist:
+
+        order = Order.objects.filter(
+            id = order_id,
+            user = request.user
+        ).first()
+        if not order:
             return Response({"Error":"Order not found"},status=404)
         
-        if order.user != user:
-            return Response({"Error":"Not Allowed"},status=403)
-        
         try:
-            payment = process_payment(order,method,user)
+            payment = process_payment(order,method,request.user)
         except PaymentFailed as e:
             return Response({"Error":str(e)},status=400)
         
         return Response({
-            "message":"Payment Successful",
+            "success":True,
             "order_status":order.status,
             "payment_id":payment.id
         })   
         
 class CreatePaymentView(APIView):
     def post(self,request,order_id):
-        user = request.user
         
-        try:
-            order = Order.objects.get(id = order_id)
-        except Order.DoesNotExist:
-            return Response({"Error":"Order not fount"},status=404)
+        order = Order.objects.filter(
+            id = order_id,
+            user = request.user
+        ).first()
         
-        if order.user != user:
-            return Response({'Error':'Not allowed'},status=403)
+        if not order:
+            return Response({"Error":"Order not found"},status=404)
         
         data = create_payment_order(order)   
-        
-        return Response(data)  
+        return Response({"success":True,"data":data})  
     
 @csrf_exempt
 def razorpay_webhook(request):
@@ -105,7 +97,7 @@ def razorpay_webhook(request):
     
     #Extract data safely
     payload = data.get('payload',{})
-    payment_entity = payment.get('payment',{}).get('entity',{})
+    payment_entity = payload.get('payment',{}).get('entity',{})
     
     razorpay_order_id = payment_entity.get('order_id')
     razorpay_payment_id = payment_entity.get('id')
@@ -121,23 +113,23 @@ def razorpay_webhook(request):
         return HttpResponse(status=404)
     
     #Idempotency check
-    if payment.status in ['Success','Failed']:
+    if payment.status in ['SUCCESS','FAILED']:
         return HttpResponse(status = 200)
     
     with transaction.atomic():
         
         order = payment.order
         if event == 'payment.captured':
-            payment.status = "Success"
+            payment.status = "SUCCESS"
             payment.razorpay_payment_id = razorpay_payment_id
             payment.save()
     
             #prevent double confirmation
-            if order.status != 'Confirmed':
-                order.status = 'Confirmed'
+            if order.status != 'CONFIRMED':
+                order.status = 'CONFIRMED'
                 order.save()
         elif event == 'payment.failed':
-            payment.status = 'Failed'
+            payment.status = 'FAILED'
             payment.razorpay_payment_id = razorpay_payment_id
             payment.save()
             
@@ -147,16 +139,18 @@ def razorpay_webhook(request):
 
 class CancelOrderView(APIView):
     def post(self,request,order_id):
-        user = request.user
         
-        try:
-            order = Order.objects.get(id=order_id)
-        except Order.DoesNotExist:
+        order = Order.objects.filter(
+            id = order_id,
+            user = request.user
+        ).first()
+        
+        if not order:
             return Response({"Error":"Order not found"},status=404)
     
         try:
-            cancel_order(order,user)
+            cancel_order(order,request.user)
         except InvalidOrderState as e:
             return Response({"Error":str(e)},status=400)
         
-        return Response({"Message":"Order cancelled successfully"})
+        return Response({"success":True,"Message":"Order cancelled successfully"})
