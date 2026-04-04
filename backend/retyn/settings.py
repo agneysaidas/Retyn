@@ -11,6 +11,12 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
 from pathlib import Path
+from celery.schedules import crontab
+import sentry_sdk
+import os
+from dotenv import load_dotenv
+
+load_dotenv(".env.dev")
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,9 +29,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-kys)qrloqlg@yolut!sqklhpmymf$q1ev0+&x&9i1xu3(2dbx)'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG") == "True"
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS","").split(",")
 
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = [
+#     'nontraceably-proauthor-selena.ngrok-free.dev', 
+#     'localhost', 
+#     '127.0.0.1',
+#     '.ngrok-free.app', # This covers any ngrok-free.app subdomains
+#     '.ngrok-free.dev', # This covers your current .dev subdomain
+# ]
 
 
 # Application definition
@@ -86,11 +100,11 @@ WSGI_APPLICATION = 'retyn.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'retyn_db',
-        'USER': 'postgres',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.getenv("DB_NAME"),
+        'USER': os.getenv("DB_USER"),
+        'PASSWORD': os.getenv("DB_PASSWORD"),
+        'HOST': os.getenv("DB_HOST"),
+        'PORT': os.getenv("DB_PORT"),
     }
 }
 
@@ -153,13 +167,65 @@ DEFAULT_PERMISSION_CLASSES = [
 LOGGING = {
     'version':1,
     'disable_existing_loggers':False,
+    'formatters':{
+        'verbase':{
+            'format' : '{levelname} {asctime} {module} {message}',
+            'style':'{',      
+        },  
+    },
     'handlers':{
         'console':{
             'class':'logging.StreamHandler',
+            'formatter':'verbase',
+        },
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': 'retyn_debug.log',
+            'formatter':'verbase',
         },
     },
     'root':{
-        'handlers':['console'],
+        'handlers':['console', 'file'],
         'level':'INFO',
     },
 }
+
+#Redis 
+REDIS_URL = 'redis://127.0.0.1:6379/0'
+#Celery Config
+CELERY_BROKER_URL = REDIS_URL
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+#Result backend
+CELERY_RESULT_BACKEND = REDIS_URL
+#Timezone
+CELERY_TIMEZONE = 'Asia/Kolkata'
+
+CACHES = {
+    'default':{
+        'BACKEND':'django_redis.cache.RedisCache',
+        'LOCATION':os.getenv("REDIS_URL"),
+        'OPTIONS':{
+            'CLIENT_CLASS':'django_redis.client.DefaultClient',
+        }
+    }
+}
+
+CELERY_BEAT_SCHEDULE = {
+    "retry-failed-payments": {
+        "task": "orders.tasks.retry_failed_payments",
+        "schedule": 300.0,
+    },
+}
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://nontraceably-proauthor-selena.ngrok-free.dev',
+]
+
+RAZORPAY_WEBHOOK_SECRET = "Asustuf3!"
+
+sentry_sdk.init(
+    dsn="",
+    traces_sample_rate = 0.2
+)

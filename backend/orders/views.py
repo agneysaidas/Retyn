@@ -11,8 +11,18 @@ import json
 from .models import Order, Payment
 from .services import cancel_order,InvalidOrderState, process_payment,PaymentFailed,create_payment_order
 from users.models import User
-from .serializers import OrderSerializer
+from .serializers import OrderSerializer, CheckoutSerializer
+
+def checkout(request):
+    serializer = CheckoutSerializer(data = request.headers)
+    serializer.is_valid(raise_exception = True)
     
+    idempotency_key = serializer.validated_data['idempotency_key']
+    
+    create_payment_order(request.user,idempotency_key)
+    
+    return Response({"status":"ok"},status = status.HTTP_200_OK)
+
 class OrderListView(APIView):
     def get(self,request):
         user = request.user

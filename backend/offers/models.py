@@ -67,3 +67,17 @@ class OfferDay(models.Model):
         on_delete=models.CASCADE
     )
     day_of_week = models.IntegerField(choices=DAY_CHOICES)
+
+class OfferUsage(models.Model):
+    user = models.ForeignKey('users.User',on_delete=models.CASCADE)
+    offer = models.ForeignKey("offers.Offer",on_delete = models.CASCADE)
+    usage_count = models.IntegerField(default = 0)
+    last_used_at = models.DateTimeField(auto_now = True)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields = ['user','offer'],
+                name = 'uniq_user_offer'
+            ),
+        ]

@@ -1,0 +1,10 @@
+# Virtual Environments
+venv/
+lvenv/
+env/
+__pycache__/
+*.pyc
+
+# Local settings
+.env
+db.sqlite3

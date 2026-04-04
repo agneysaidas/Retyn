@@ -13,3 +13,11 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
         fields = ['id','store','user','items']
+        
+class CheckoutSerializer(serializers.Serializer):
+    idempotency_key = serializers.CharField(
+        max_length = 255,
+        required = True,
+        allow_blank = False,
+        trim_whitespace = True
+    )

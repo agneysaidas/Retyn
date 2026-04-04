@@ -30,3 +30,11 @@ class OrderSerializer(serializers.ModelSerializer):
             'created_at',
             'items',
         ]
+        
+class CheckoutSerializer(serializers.ModelSerializer):
+    idempotency_key = serializers.CharField(
+        max_length = 255,
+        required = True,
+        allow_blank = False,
+        trim_whitespace = True
+    )

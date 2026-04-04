@@ -3,8 +3,9 @@ from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from django.core.cache import cache
 from .models import Cart, CartItem
-from .serializer import CartSerializer,CartItemSerializer
+from .serializer import CartSerializer,CartItemSerializer,CheckoutSerializer
 from products.models import Product
 from users.models import User
 from .services import checkout,InsufficientStock
@@ -87,38 +88,41 @@ class RemoveCartItemView(APIView):
         
         return Response({'Message':"Item removed"})
     
+def rate_limit(request):
+    key = f"rate:{request.user.id}:{request.META.get('REMOTE_ADDR')}"
+    count = cache.get(key, 0)
+
+    if count > 30:
+        return False
+
+    cache.set(key, count + 1, timeout=60)
+    return True
+
+
 class CheckoutView(APIView):
-    
-    def post(self,request):
-        user = request.user
-        cart = Cart.objects.filter(user=user,is_active=True).first()
+    def post(self, request):
+        serializer = CheckoutSerializer(data={
+            "idempotency_key": request.headers.get("Idempotency-Key")
+        })
+
+        serializer.is_valid(raise_exception=True)
+
+        key = serializer.validated_data["idempotency_key"]
         
-        if not cart:
-            return Response(
-                {'Error':'Cart is empty'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        if not cart.items.exists():
-            return Response(
-                {'Error':"Cart has no items"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            order = checkout(cart)
-        except InsufficientStock as e:
-            print("CHECKOUT ERROR:",str(e))
-            return Response(
-                {"error":str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
-        return Response(
-            {
-                "Message":"Order placed Successfully",
-                "order_id":order.id,
-                "total_amount":str(order.total_amount),
-                "total_discount":str(order.total_discount),
-                "final_amount":str(order.final_amount),
-            }
-        )
+        if not key:
+            return Response({"error": "Missing key"}, status=400)
+
+        if not rate_limit(request):
+            return Response({"error": "Too many requests"}, status=429)
+
+        cart = Cart.objects.filter(user=request.user, is_active=True).first()
+
+        if not cart or not cart.items.exists():
+            return Response({"error": "Empty cart"}, status=400)
+
+        order = checkout(cart, key)
+
+        return Response({
+            "order_id": order.id,
+            "amount": str(order.final_amount)
+        })

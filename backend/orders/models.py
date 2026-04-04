@@ -1,4 +1,5 @@
 from django.db import models
+import uuid
 
 class Order(models.Model):
     STATUS_CHOICES = (
@@ -30,13 +31,20 @@ class Order(models.Model):
         choices=STATUS_CHOICES,
         default='PENDING')
     created_at = models.DateTimeField(auto_now_add=True)
-    
+    idempotency_key = models.CharField(null=True, blank=True)
     class Meta:
         indexes = [
             models.Index(fields=['user']),
             models.Index(fields=['status']),
             models.Index(fields=['created_at']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields = ['idempotency_key'],
+                name = 'uniq_idempotency'
+            ),
+        ]
+        
     
     def __str__(self):
         return f"Order #{self.id}"
@@ -93,8 +101,51 @@ class Payment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     razorpay_order_id = models.CharField(max_length=255, null=True, blank=True)
     razorpay_payment_id = models.CharField(max_length=255, null=True, blank=True)
-    
+    retry_count = models.IntegerField(default = 0)
+    last_attempt_at = models.DateTimeField(null=True,blank=True)
     class Meta:
         indexes = [
             models.Index(fields=['razorpay_order_id']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields = ['razorpay_payment_id'],
+                name = 'uniq_payment'
+            ),
+        ]
+        
+class PaymentAuditLog(models.Model):
+    EVENT_CHOICES = [
+        ("CREATED", "Created"),
+        ("INITIATED", "Initiated"),
+        ("SUCCESS", "Success"),
+        ("FAILED", "Failed"),
+        ("WEBHOOK_RECEIVED", "Webhook Received"),
+        ("RETRY", "Retry"),
+    ]
+
+    payment = models.ForeignKey(
+        "Payment",
+        on_delete=models.CASCADE,
+        related_name="audit_logs"
+    )
+
+    event = models.CharField(max_length=50, choices=EVENT_CHOICES)
+
+    # Optional but VERY useful
+    metadata = models.JSONField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["payment", "event"]),
+            models.Index(fields=["created_at"]),
+        ]
+
+    def _str_(self):
+        return f"{self.payment.id} - {self.event}"
+
+class PaymentWebhookLog(models.Model):
+    event_id = models.CharField(max_length=255,unique = True)
+    created_at = models.DateTimeField(auto_now_add=True)
