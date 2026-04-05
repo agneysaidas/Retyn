@@ -6,6 +6,7 @@ on:
       - main
 
 jobs:
+
   build-and-push:
     runs-on: ubuntu-latest
 
@@ -27,24 +28,27 @@ jobs:
         run: |
           docker push ${{ secrets.DOCKER_USERNAME }}/retyn-backend:latest
 
+
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy to EC2
+      - name: Deploy to EC2 via Docker Compose
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            docker pull ${{ secrets.DOCKER_USERNAME }}/retyn-backend:latest
-            docker stop backend_web_1 || true
-            docker rm backend_web_1 || true
+            cd ~/Retyn/backend
 
-            docker run -d \
-              --name backend_web_1 \
-              -p 8000:8000 \
-              --env-file ~/Retyn/backend/.env \
-              ${{ secrets.DOCKER_USERNAME }}/retyn-backend:latest
+            echo "Pulling latest images..."
+            docker-compose pull
+
+            echo "Restarting services..."
+            docker-compose down
+            docker-compose up -d
+
+            echo "Cleaning unused images..."
+            docker image prune -f
