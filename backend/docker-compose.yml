@@ -2,6 +2,8 @@ services:
   db:
     image: postgres:15
     restart: always
+    env_file:
+      - .env
     environment:
       POSTGRES_DB: retyn_db
       POSTGRES_USER: postgres
@@ -37,7 +39,7 @@ services:
       - .env
     restart: always
 
-  nginx: # Fixed the indentation here
+  nginx: 
     image: nginx:latest
     ports:
       - "80:80"
