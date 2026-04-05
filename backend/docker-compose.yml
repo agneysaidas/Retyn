@@ -1,26 +1,4 @@
 services:
-  web:
-    build: .
-    command: gunicorn retyn.wsgi:application --bind 0.0.0.0:8000 --workers 3
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - redis
-    env_file:
-      - .env
-    restart: always
-
-  worker:
-    build: .
-    command: celery -A retyn worker -l info
-    depends_on:
-      - db
-      - redis
-    env_file:
-      - .env
-    restart: always
-
   db:
     image: postgres:15
     restart: always
@@ -30,9 +8,54 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Added healthcheck so Django doesn't try to connect before DB is ready
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d retyn_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
-    image: redis:7
+    image: redis:7-alpine
+    restart: always
+
+  web:
+    build: .
+    command: gunicorn retyn.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - .env
+    restart: always
+
+  worker:
+    build: .
+    command: celery -A retyn worker -l info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - .env
+    restart: always
+
+  nginx: # Fixed the indentation here
+    image: nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/certbot/www:/var/www/certbot
+      - ./nginx/certbot/conf:/etc/letsencrypt
+    depends_on:
+      - web
     restart: always
 
 volumes:
