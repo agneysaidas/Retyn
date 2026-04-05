@@ -8,12 +8,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    # Added healthcheck so Django doesn't try to connect before DB is ready
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d retyn_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+
 
   redis:
     image: redis:7-alpine
