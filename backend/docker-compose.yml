@@ -1,4 +1,7 @@
+version: "3.9"
+
 services:
+
   db:
     image: postgres:15
     restart: always
@@ -21,10 +24,10 @@ services:
     restart: always
 
   web:
-    build: .
-    command: gunicorn retyn.wsgi:application --bind 0.0.0.0:8000 --workers 3
-    ports:
-      - "8000:8000"
+    image: mokeydluffy/retyn-backend:latest
+    command: gunicorn retyn.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120
+    expose:
+      - "8000"
     depends_on:
       db:
         condition: service_healthy
@@ -35,7 +38,7 @@ services:
     restart: always
 
   worker:
-    build: .
+    image: monkeydluffy/retyn-backend:latest
     command: celery -A retyn worker -l info
     depends_on:
       db:
