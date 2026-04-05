@@ -46,6 +46,7 @@ python-dateutil
 razorpay
 redis
 requests
+sentry-sdk
 si
 sqlparse
 stack-data
