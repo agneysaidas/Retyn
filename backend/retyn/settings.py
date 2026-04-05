@@ -180,11 +180,11 @@ LOGGING = {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
             'filename': 'retyn_debug.log',
-            'formatter':'verbase',
+            'formatter':'simple',
         },
     },
     'root':{
-        'handlers':['console', 'file'],
+        'handlers':['console'],
         'level':'INFO',
     },
 }
