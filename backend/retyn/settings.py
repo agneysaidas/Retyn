@@ -163,28 +163,25 @@ DEFAULT_PERMISSION_CLASSES = [
 ]
 
 LOGGING = {
-    'version':1,
-    'disable_existing_loggers':False,
-    'formatters':{
-        'simple':{
-            'format' : '%{levelname}s %{message}s',
-        } 
+    'version': 1,
+    'disable_existing_loggers': False,
+
+    'formatters': {
+        'simple': {
+            'format': '%(levelname)s %(message)s',
+        }
     },
-    'handlers':{
-        'console':{
-            'class':'logging.StreamHandler',
-            'formatter':'simple',
-        },
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': '/app/logs.django.log',
-            'formatter':'simple',
+
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
         },
     },
-    'root':{
-        'handlers':['console'],
-        'level':'INFO',
+
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
     },
 }
 
