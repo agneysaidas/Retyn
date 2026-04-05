@@ -194,13 +194,14 @@ LOGGING = {
 #Redis 
 REDIS_URL = 'redis://127.0.0.1:6379/0'
 #Celery Config
-CELERY_BROKER_URL = REDIS_URL
+CELERY_BROKER_URL = os.getenv("REDIS_URL")
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 #Result backend
 CELERY_RESULT_BACKEND = REDIS_URL
 #Timezone
 CELERY_TIMEZONE = 'Asia/Kolkata'
+
 
 CACHES = {
     'default':{
@@ -229,3 +230,5 @@ sentry_sdk.init(
     dsn="",
     traces_sample_rate = 0.2
 )
+
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
