@@ -29,7 +29,7 @@ SECRET_KEY = 'django-insecure-kys)qrloqlg@yolut!sqklhpmymf$q1ev0+&x&9i1xu3(2dbx)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG") == "True"
 SECRET_KEY = os.getenv("SECRET_KEY")
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS","").split(",")
+ALLOWED_HOSTS = ["*"]
 
 # ALLOWED_HOSTS = [
 #     'nontraceably-proauthor-selena.ngrok-free.dev', 
