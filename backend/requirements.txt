@@ -58,3 +58,4 @@ vine
 wcwidth
 Werkzeug
 WTForms
+python-dotenv
