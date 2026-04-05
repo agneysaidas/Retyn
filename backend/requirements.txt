@@ -24,6 +24,7 @@ Flask
 flask-bootstrap5
 Flask-Login
 Flask-WTF
+gunicorn
 idna
 ipython
 ipython_pygments_lexers
