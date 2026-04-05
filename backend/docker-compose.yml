@@ -10,6 +10,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -22,7 +27,9 @@ services:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
       redis:
+        condition: service_started
     env_file:
       - .env
     restart: always
@@ -32,12 +39,14 @@ services:
     command: celery -A retyn worker -l info
     depends_on:
       db:
+        condition: service_healthy
       redis:
+        condition: service_started
     env_file:
       - .env
     restart: always
 
-  nginx: 
+  nginx:
     image: nginx:latest
     ports:
       - "80:80"
