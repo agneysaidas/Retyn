@@ -166,20 +166,19 @@ LOGGING = {
     'version':1,
     'disable_existing_loggers':False,
     'formatters':{
-        'verbase':{
-            'format' : '{levelname} {asctime} {module} {message}',
-            'style':'{',      
-        },  
+        'simple':{
+            'format' : '%{levelname}s %{message}s',
+        } 
     },
     'handlers':{
         'console':{
             'class':'logging.StreamHandler',
-            'formatter':'verbase',
+            'formatter':'simple',
         },
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': 'retyn_debug.log',
+            'filename': '/app/logs.django.log',
             'formatter':'simple',
         },
     },
